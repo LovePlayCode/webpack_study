@@ -2195,14 +2195,50 @@ declare class Compilation {
 	moduleGraph: ModuleGraph;
 	chunkGraph: ChunkGraph;
 	codeGenerationResults: CodeGenerationResults;
+
+	/**
+	 * 依赖处理队列 - 分析和处理模块的依赖关系（根队列）
+	 * - 职责：递归分析模块依赖，发现新的模块需求，构建模块依赖图
+	 * - 优先级：最高优先级的根队列，其他队列作为子队列共享其资源
+	 * - 处理流程：分析模块 → 提取依赖 → 递归处理子依赖 → 构建依赖关系
+	 * - 性能控制：通过 parallelism 控制并发处理的模块数量
+	 */
 	processDependenciesQueue: AsyncQueue<Module, Module, Module>;
+
+	/**
+	 * 模块添加队列 - 负责将模块添加到编译过程中
+	 * - 职责：管理模块的去重和注册
+	 * - 父队列：processDependenciesQueue（共享资源，优先级管理）
+	 * - 去重机制：使用 module.identifier() 作为唯一标识
+	 */
 	addModuleQueue: AsyncQueue<Module, string, Module>;
+
+	/**
+	 * 模块工厂化队列 - 通过 ModuleFactory 创建模块实例
+	 * - 职责：将依赖请求转换为具体的模块对象
+	 * - 父队列：addModuleQueue（处理流水线：factorize → add → processDependencies）
+	 * - 处理内容：解析请求、匹配加载器、创建 NormalModule 等
+	 */
 	factorizeQueue: AsyncQueue<
 		FactorizeModuleOptions,
 		string,
 		Module | ModuleFactoryResult
 	>;
+
+	/**
+	 * 模块构建队列 - 执行模块的构建过程
+	 * - 职责：解析模块源码、应用加载器、收集依赖
+	 * - 父队列：factorizeQueue（确保模块先创建再构建）
+	 * - 处理内容：读取文件、loader处理、AST解析、依赖提取
+	 */
 	buildQueue: AsyncQueue<Module, Module, Module>;
+
+	/**
+	 * 模块重建队列 - 处理模块的重新构建
+	 * - 职责：用于 HMR（热模块替换）等场景的模块更新
+	 * - 特点：独立队列，不依赖其他队列，拥有独立的并行度控制
+	 * - 使用场景：文件变更、开发模式下的增量编译
+	 */
 	rebuildQueue: AsyncQueue<Module, Module, Module>;
 
 	/**
